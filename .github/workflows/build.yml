@@ -25,6 +25,7 @@ jobs:
         run: |
           pip install fastapi uvicorn
           pip install pytest pytest-cov
+          pip install httpx
 
       - name: Run unit tests
         run: |
