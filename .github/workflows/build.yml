@@ -22,9 +22,9 @@ jobs:
         with:
           python-version: "3.10"
 
-      # Install only what we need
       - name: Install Test Dependencies
         run: |
+          pip install fastapi uvicorn
           pip install pytest pytest-cov
 
       - name: Run unit tests
