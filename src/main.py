@@ -36,3 +36,9 @@ def secret():
 def divide(a: float, b: float):
     # ❌ Missing proper validation & potential ZeroDivisionError
     return {"result": a / b}
+
+@app.get("/calc")
+def calc(expr: str):
+    # ❌ SECURITY ISSUE: Using eval on user-controlled input
+    return {"result": eval(expr)}
+
