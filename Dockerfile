@@ -1,20 +1,37 @@
-FROM python:3.11-slim
+# ---- builder: build wheels / install deps ----
+FROM python:3.11-slim AS builder
+WORKDIR /build
 
-# Set working directory
-WORKDIR /app
+# Install build deps only in builder
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential gcc && rm -rf /var/lib/apt/lists/*
 
-# Copy only required files
+# Copy requirements for wheel building
 COPY requirements.txt .
 
-# Upgrade pip and install dependencies
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+# Build wheels for requirements AND their dependencies (no --no-deps)
+# This ensures transitive dependencies like starlette are also built and available in /wheels.
+RUN python -m pip install --upgrade pip wheel \
+    && pip wheel --wheel-dir /wheels -r requirements.txt
 
-# Copy source code
-COPY src/ src/
+# ---- runtime: smaller final image ----
+FROM python:3.11-slim AS runtime
+WORKDIR /app
 
-# Expose port
+# Create non-root user
+RUN useradd -m appuser
+
+# Copy wheels and install from them (no build tools needed at runtime)
+COPY --from=builder /wheels /wheels
+COPY requirements.txt .
+RUN python -m pip install --upgrade pip \
+    && pip install --no-index --find-links=/wheels -r requirements.txt \
+    && rm -rf /wheels
+
+# Copy app source (omit tests)
+COPY src/ ./src
+
+ENV PYTHONPATH=/app/src
+USER appuser
 EXPOSE 8000
 
-# Command to run FastAPI
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
