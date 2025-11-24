@@ -2,8 +2,7 @@ name: Build
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -26,7 +25,6 @@ jobs:
         run: |
           pip install fastapi uvicorn
           pip install pytest pytest-cov
-          pip install httpx
 
       - name: Run unit tests
         run: |
