@@ -33,4 +33,9 @@ jobs:
       - name: Run unit tests
         run: pytest --cov=. --cov-report=xml
 
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_SCANNER_OPTS: "-Dsonar.python.coverage.reportPaths=coverage.xml"
   
