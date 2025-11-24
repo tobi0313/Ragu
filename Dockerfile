@@ -1,30 +1,53 @@
-# Use the official OWASP ZAP image (contains ZAP and Java)
-FROM owasp/zap2docker-stable:latest
+# Official lightweight Python image
+FROM python:3.10-slim
 
-# Switch to root so we can install python
-USER root
+# Do not write .pyc files and run in unbuffered mode (useful for logging)
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PORT=8000
 
-# Install Python3 and pip
-RUN apt-get update && \
-    apt-get install -y python3 python3-pip curl && \
-    rm -rf /var/lib/apt/lists/*
-
-# Create app dir
+# Set working directory
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
+# Install system dependencies needed to build some Python packages
+# adjust packages (libpq-dev, build-essential, gcc) based on your project's needs
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      build-essential \
+      gcc \
+      libpq-dev \
+      curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy dependency specification first for Docker layer caching.
+# Make sure your repo contains a requirements.txt (or adapt this to pyproject.toml / poetry).
 COPY requirements.txt /app/requirements.txt
-RUN pip3 install --no-cache-dir -r /app/requirements.txt
 
-# Copy scripts
-COPY run_zap_scan.sh /app/run_zap_scan.sh
-COPY zap_scan.py /app/zap_scan.py
+# Upgrade pip and install Python dependencies
+RUN python -m pip install --upgrade pip && \
+    pip install -r /app/requirements.txt
 
-# Make sure the wrapper is executable
-RUN chmod +x /app/run_zap_scan.sh
+# Copy project source code
+COPY . /app
 
-# Optional: expose the ZAP API port (daemon will run on 8090 in the script)
-EXPOSE 8090
+# Create a non-root user and give ownership of the app directory
+RUN useradd --create-home --shell /bin/bash appuser && \
+    chown -R appuser:appuser /app
 
-# Default entrypoint will start ZAP (daemon) and run the python scanner
-ENTRYPOINT ["/app/run_zap_scan.sh"]
+USER appuser
+
+# Expose the default port (override with PORT env var if needed)
+EXPOSE 8000
+
+# Basic healthcheck - adjust path if your app serves at a different endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:${PORT} || exit 1
+
+# Allow the runtime command to be overridden via START_CMD environment variable.
+# Default assumes your application package/module is runnable as "python -m src".
+# If your entrypoint is different (e.g. src.main, app.py, or uvicorn), override START_CMD at runtime:
+# docker run -e "START_CMD=uvicorn src.app:app --host 0.0.0.0 --port ${PORT}" ...
+ENTRYPOINT ["sh", "-c"]
+CMD ["exec ${START_CMD:-python -m src}"]
