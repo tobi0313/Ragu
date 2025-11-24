@@ -1,8 +1,5 @@
-# Python client for ZAP API
-python-owasp-zap-v2.4
-
-# Optional helper CLI (not required by the included script but useful)
-zap-cli
-
-# HTTP utilities
-requests
+fastapi
+uvicorn
+pytest
+pytest-cov
+httpx
