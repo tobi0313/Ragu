@@ -2,40 +2,81 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
     types: [opened, synchronize, reopened]
 
 jobs:
-  sonarqube:
+  security_tests:
+    name: Unit Tests + SonarQube + Docker + OWASP ZAP
     runs-on: ubuntu-latest
 
     steps:
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
-      - name: Install Test Dependencies
+      - name: Install Dependencies
         run: |
-          pip install fastapi uvicorn
-          pip install pytest pytest-cov
-          pip install httpx
+          pip install coverage
 
-      # FIX: Allow pytest to import src.main
-      - name: Add project root to PYTHONPATH
-        run: echo "PYTHONPATH=$(pwd)" >> $GITHUB_ENV
-
-      - name: Run unit tests
-        run: pytest --cov=. --cov-report=xml
+      - name: Run Unit Tests with Coverage
+        run: |
+          coverage run -m unittest discover -s src -p "test_*.py"
+          coverage xml
 
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602
+        uses: SonarSource/sonarqube-scan-action@v6
+        with:
+          args: >
+            -Dsonar.projectKey=Gayathri17sk_dev_sec
+            -Dsonar.organization=gayathri17sk
+            -Dsonar.sources=src
+            -Dsonar.python.coverage.reportPaths=coverage.xml
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_SCANNER_OPTS: "-Dsonar.python.coverage.reportPaths=coverage.xml"
-  
+
+      - name: Build Docker Image
+        run: |
+          docker build -t myapp:latest .
+
+      - name: Run Docker Container
+        run: |
+          docker run -d -p 8000:8000 --name myapp_container myapp:latest
+          sleep 10
+
+      - name: OWASP ZAP Baseline Scan (JSON Output)
+        run: |
+          mkdir -p zap
+          docker pull zaproxy/zap-stable
+          docker run \
+            -v $(pwd)/zap:/zap/wrk \
+            --network="host" \
+            zaproxy/zap-stable zap-baseline.py \
+            -t http://localhost:8000 \
+            -r zap_report.html \
+            -J zap_report.json || true
+
+      - name: Upload ZAP HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap_html_report
+          path: zap/zap_report.html
+
+      - name: Upload ZAP JSON Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap_json_report
+          path: zap/zap_report.json
+
+      - name: Stop Container
+        run: |
+          docker stop myapp_container
+          docker rm myapp_container
