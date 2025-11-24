@@ -1,35 +1,38 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+import sqlite3
 
 app = FastAPI()
 
-@app.get("/add")
-def add(a: float, b: float):
-    return {"result": a + b}
+# ❌ Hardcoded secret (SonarQube will flag this)
+API_KEY = "12345-SECRET-KEY"
 
-@app.get("/subtract")
-def subtract(a: float, b: float):
-    return {"result": a - b}
+# ❌ Unsafe global database connection (SonarQube warning)
+conn = sqlite3.connect("test.db", check_same_thread=False)
 
-@app.get("/multiply")
-def multiply(a: float, b: float):
-    return {"result": a * b}
+@app.get("/login")
+def login(username: str):
+    # ❌ SQL Injection vulnerability
+    query = f"SELECT * FROM users WHERE username = '{username}'"
+    cursor = conn.execute(query)
+    result = cursor.fetchone()
+    return {"user": result}
+
+@app.post("/execute")
+async def execute(request: Request):
+    body = await request.json()
+    code = body.get("code")
+
+    # ❌ Dangerous: executing user-provided code
+    exec(code)  # SonarQube flags "Use of exec is insecure"
+
+    return {"status": "Executed"}
+
+@app.get("/secret")
+def secret():
+    # ❌ Sensitive data exposure
+    return {"api_key": API_KEY}
 
 @app.get("/divide")
 def divide(a: float, b: float):
-    if b == 0:
-        return {"error": "Cannot divide by zero"}
+    # ❌ Missing proper validation & potential ZeroDivisionError
     return {"result": a / b}
-
-@app.get("/power")
-def power(a: float, b: float):
-    return {"result": a ** b}
-
-@app.get("/modulo")
-def modulo(a: float, b: float):
-    if b == 0:
-        return {"error": "Cannot modulo by zero"}
-    return {"result": a % b}
-
-@app.get("/average")
-def average(a: float, b: float):
-    return {"result": (a + b) / 2}
